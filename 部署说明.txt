@@ -1,0 +1,43 @@
+============================================
+  llama.cpp 模型管理台 · 跨电脑部署说明
+============================================
+
+【第一步】复制文件
+把本目录下这两个文件复制到目标电脑的任意目录（例如 D:\llama-manager\）：
+  - llama-manager.exe        （主程序，双击即用）
+  - llama-manager.json.example（配置文件示例，可选）
+
+【第二步】运行
+直接双击 llama-manager.exe 即可打开图形界面。
+程序默认使用以下路径（与开发机一致）：
+  - llama.cpp 根目录：G:\llama.cpp
+    （需包含 llama-server.exe 和 scripts\ 目录）
+  - 模型存放目录：G:\models
+    （自动扫描其中的 *.gguf，含 gguf\ 子目录）
+
+【第三步】如果目标电脑目录不同（必看）
+把 llama-manager.json.example 改名为 llama-manager.json，
+放在 exe 同目录，按实际路径修改后保存：
+
+  {
+    "llama_dir": "D:\\llama.cpp",
+    "models_dir": "D:\\models",
+    "port_api": 17890
+  }
+
+  - llama_dir   ：目标电脑 llama.cpp 所在目录（含 llama-server.exe）
+  - models_dir  ：模型 .gguf 文件所在目录
+  - port_api    ：管理台界面端口（默认 17890，被占用时可改）
+
+【第四步】添加模型
+把 .gguf 模型文件放进 models_dir（或其 gguf\ 子目录），
+管理台 2 秒内自动识别，列表点击即可启动，无需写任何脚本。
+
+【注意事项】
+- 首次运行会自动扫描模型目录，自动生成每个模型的启动脚本
+- 同一时刻只能运行一个模型（显存限制）
+- 管理台仅监听本机 127.0.0.1，不对外网暴露
+- 若目标电脑没有 WebView2 运行库，程序会自动改用系统浏览器打开界面
+
+【版本说明】
+2026-08-28 v3：支持 llama-manager.json 配置文件；速度栏修复（显示真实生成速度）。

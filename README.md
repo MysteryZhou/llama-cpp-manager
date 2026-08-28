@@ -49,6 +49,18 @@ llama-manager/
 | `LLAMA_CPP_DIR` | `G:\llama.cpp` | llama.cpp 根目录（含 `llama-server.exe` 与 `scripts/`） |
 | `LLAMA_MODELS_DIR` | `G:\models` | 模型存放根目录（自动扫描其中的 `*.gguf`，含 `gguf/` 子目录） |
 
+**配置文件方式（推荐，免设环境变量）**：在 exe/脚本同目录放 `llama-manager.json`（参考 `llama-manager.json.example`）：
+
+```json
+{
+  "llama_dir": "D:\\llama.cpp",
+  "models_dir": "D:\\models",
+  "port_api": 17890
+}
+```
+
+配置优先级：环境变量 > 配置文件 > 默认值。跨电脑部署时，把 EXE 拷到目标机器，改这份 json 即可，无需重新打包。
+
 ### 运行
 
 ```bash

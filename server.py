@@ -16,16 +16,49 @@ import os, re, glob, json, time, socket, subprocess, threading, sys
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# 目录配置：默认适配本机，可用环境变量覆盖（方便部署到其他机器）
-#   LLAMA_CPP_DIR    llama.cpp 根目录（含 llama-server.exe 与 scripts/）
-#   LLAMA_MODELS_DIR 模型存放根目录（自动扫描 *.gguf）
-LLAMA_DIR = os.environ.get("LLAMA_CPP_DIR", r"G:\llama.cpp")
+# ---------------------------------------------------------------- 配置加载
+# 配置优先级：环境变量 > exe/脚本同目录 llama-manager.json > 默认值
+# llama-manager.json 示例（可选，跨电脑部署用）：
+#   {"llama_dir": "D:\\llama.cpp", "models_dir": "D:\\models", "port_api": 17890}
+
+def _load_cfg():
+    cfg = {}
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.join(base, "llama-manager.json")
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                cfg = json.load(f) or {}
+        except Exception:
+            cfg = {}
+    return cfg
+
+CFG = _load_cfg()
+
+_ENV_ALIAS = {"llama_dir": "LLAMA_CPP_DIR", "models_dir": "LLAMA_MODELS_DIR"}
+
+def cfg_get(key, default):
+    """环境变量 > 配置文件 > 默认值"""
+    env_name = _ENV_ALIAS.get(key, "LLAMA_" + key.upper())
+    v = os.environ.get(env_name)
+    if v is not None and v != "":
+        return v
+    v = CFG.get(key)
+    if v is not None and v != "":
+        return str(v)
+    return default
+
+# 目录配置：默认适配 G 盘本机，另一台电脑可用 llama-manager.json 或环境变量覆盖
+LLAMA_DIR = cfg_get("llama_dir", r"G:\llama.cpp")
 SCRIPTS   = os.path.join(LLAMA_DIR, "scripts")
 SERVER_EXE= os.path.join(LLAMA_DIR, "llama-server.exe")
 LOG_DIR   = os.path.join(LLAMA_DIR, "manager", "logs")
 BASE      = os.path.dirname(os.path.abspath(__file__))   # 仅开发模式使用
-PORT_API  = 17890
-PORT_LLM  = 11434
+PORT_API  = int(cfg_get("port_api", 17890))
+PORT_LLM  = int(cfg_get("port_llm", 11434))
 LLM_HEALTH_URL = "http://127.0.0.1:%d/v1/models" % PORT_LLM
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -77,8 +110,8 @@ def list_models():
 
 # ---------------------------------------------------------------- 模型自动发现
 
-# 扫描的模型存放目录（可用环境变量 LLAMA_MODELS_DIR 覆盖）
-_MODELS_BASE = os.environ.get("LLAMA_MODELS_DIR", r"G:\models")
+# 扫描的模型存放目录（可用 llama-manager.json 的 models_dir 或环境变量 LLAMA_MODELS_DIR 覆盖）
+_MODELS_BASE = cfg_get("models_dir", r"G:\models")
 MODEL_DIRS = [_MODELS_BASE, os.path.join(_MODELS_BASE, "gguf")]
 
 DEFAULT_BAT = r"""@echo off
@@ -258,7 +291,7 @@ def llm_pid():
     return None
 
 def get_speed(script_name):
-    """从日志尾部解析最近一条输出速度 tok/s"""
+    """从日志尾部解析最近一条【生成】速度 tok/s（排除预填充 prompt eval）"""
     if not script_name:
         return None
     logf = os.path.join(LOG_DIR, script_name.replace(".bat", ".log"))
@@ -270,6 +303,17 @@ def get_speed(script_name):
             size = f.tell()
             f.seek(max(0, size - 131072))   # 读尾部 128KB
             tail = f.read().decode("utf-8", errors="ignore")
+        # 新版: "...| eval time = 820 ms / 30 tokens (...35.36 tokens per second)"
+        # 旧版: "llama_perf_context_print: eval time = ... tokens per second"
+        # 必须排除 prompt 行（prompt eval time = 预填充速度，可达数百 tok/s）
+        for line in reversed(tail.splitlines()):
+            low = line.lower()
+            if ("tokens per second" in low and "eval time" in low
+                    and "prompt" not in low):
+                m = re.search(r"([\d.]+)\s*tokens? per second", line, re.I)
+                if m:
+                    return round(float(m.group(1)), 1)
+        # 兜底（无 eval 行时取最后一条 tps，避免空白）
         ms = re.findall(r"(\d+\.?\d*)\s*tokens? per second", tail, re.I)
         return round(float(ms[-1]), 1) if ms else None
     except Exception:

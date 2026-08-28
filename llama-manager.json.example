@@ -1,0 +1,5 @@
+{
+  "llama_dir": "D:\\llama.cpp",
+  "models_dir": "D:\\models",
+  "port_api": 17890
+}
