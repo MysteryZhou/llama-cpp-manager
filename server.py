@@ -85,6 +85,15 @@ def parse_script(path):
     size = None
     if model and os.path.exists(model):
         size = round(os.path.getsize(model) / 1e9, 1)
+    # 从启动脚本探测 effort 档位（兼容 --reasoning-effort 旧参数 与 --chat-template-kwargs 新通道）
+    re_effort = val("reasoning-effort") or "default"
+    if re_effort == "default":
+        kt = val("chat-template-kwargs")
+        if kt:
+            try:
+                re_effort = json.loads(kt).get("reasoning_effort") or "default"
+            except Exception:
+                re_effort = "default"
     return {
         "script": os.path.basename(path),
         "path":   path,
@@ -96,6 +105,7 @@ def parse_script(path):
         "cache_kv": val("cache-type-k") or "f16",
         "mtp": "draft-mtp" in text,
         "gpu_layers": val("n-gpu-layers") or "99",
+        "reasoning_effort": re_effort,
         "auto": "auto-generated" in text,
     }
 
@@ -243,7 +253,22 @@ def build_args(bat_path, opts=None):
     if "cache_v" in opts:    set_val("--cache-type-v", opts.get("cache_v"))
     if "gpu_layers" in opts: set_val("--n-gpu-layers", opts.get("gpu_layers"))
     if "reasoning" in opts:
-        set_val("--reasoning", "on" if opts.get("reasoning") else "off")
+        reasoning_on = bool(opts.get("reasoning"))
+        set_val("--reasoning", "on" if reasoning_on else "off")
+    if "reasoning_effort" in opts:
+        # 实测(b10644)：--reasoning-effort 只是 token 预算，不会注入模板档位；
+        # 正确通道是 --chat-template-kwargs '{"reasoning_effort":"档位"}'（作为启动默认档，请求可覆盖）。
+        # 白名单仅 xhigh/medium/low（Qwen3.8 模板真实支持，其余值模板会 raise 报错）；
+        # 'default'/空/未知值 = 不写参数，保持模板默认（模板默认即 xhigh）。
+        effort = str(opts.get("reasoning_effort") or "").strip().lower()
+        if "reasoning" in opts:
+            reasoning_on = bool(opts.get("reasoning"))
+        else:
+            reasoning_on = str(d.get("--reasoning", "on")).lower() != "off"
+        if reasoning_on and effort in ("xhigh", "medium", "low"):
+            set_val("--chat-template-kwargs", json.dumps({"reasoning_effort": effort}, separators=(",", ":")))
+        else:
+            d.pop("--chat-template-kwargs", None)
     if "flash_attn" in opts:
         set_val("--flash-attn", "on" if opts.get("flash_attn") else "off")
     if "parallel" in opts:      set_val("--parallel", opts.get("parallel"))
@@ -275,7 +300,8 @@ CURRENT = {"script": None, "options": None}
 def llm_pid():
     """返回当前占用 11434 端口的 PID，无则 None"""
     try:
-        res = subprocess.run(["netstat", "-ano"], capture_output=True, timeout=10)
+        res = subprocess.run(["netstat", "-ano"], capture_output=True, timeout=10,
+                             creationflags=subprocess.CREATE_NO_WINDOW)
         # Windows 中文系统下 netstat 输出为 GBK，需手动解码
         out = res.stdout.decode("gbk", errors="replace")
     except Exception:
@@ -435,7 +461,8 @@ def stop_model(wait=True):
         if not pid:
             return False, "当前没有运行中的模型"
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                       capture_output=True, timeout=10)
+                       capture_output=True, timeout=10,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
         if wait:
             wait_port_free()
         CURRENT["script"] = None
@@ -515,7 +542,8 @@ def gpu_info():
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu",
              "--format=csv,noheader,nounits"],
-            capture_output=True, timeout=5).stdout.decode("utf-8", "ignore")
+            capture_output=True, timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW).stdout.decode("utf-8", "ignore")
         parts = [x.strip() for x in out.strip().split(",")]
         used, total, util = float(parts[0]), float(parts[1]), float(parts[2])
         return {"vram_used": round(used / 1024, 1), "vram_total": round(total / 1024, 1),

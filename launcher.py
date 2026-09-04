@@ -15,8 +15,10 @@ import server
 
 
 def main():
-    # 防止重复启动：单实例（检测端口，已在跑则只开窗口）
+    # 单实例保护：检测到已有实例（端口已监听）时，不重复开窗口，
+    # 直接用系统浏览器打开已有后端，然后退出（避免窗口叠罗汉）
     import socket
+    import webbrowser
     already = False
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -27,14 +29,19 @@ def main():
     finally:
         s.close()
 
-    srv = None
-    if not already:
-        srv = server.start_server()
-        if srv is None:
-            already = True  # 端口被占但连不上？仍尝试打开页面
-
     url = "http://127.0.0.1:%d" % server.PORT_API
-    window = None
+
+    if already:
+        # 已有实例在跑：打开浏览器访问，不创建新 WebView2 窗口
+        webbrowser.open(url)
+        return
+
+    srv = server.start_server()
+    if srv is None:
+        # 端口被占但连不上：也走浏览器兜底
+        webbrowser.open(url)
+        return
+
     try:
         import webview
         window = webview.create_window(

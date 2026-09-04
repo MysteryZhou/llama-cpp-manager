@@ -158,8 +158,8 @@
     color:var(--text);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:var(--mono);outline:none;transition:.15s}
   .f-row input:focus,.f-row select:focus{border-color:var(--blue)}
   .switch{position:relative;display:inline-block;width:42px;height:22px;vertical-align:middle}
-  .switch input{opacity:0;width:0;height:0}
-  .slider{position:absolute;inset:0;background:var(--border-strong);border-radius:999px;transition:.2s;cursor:pointer}
+  .switch input{position:absolute;inset:0;z-index:1;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
+  .slider{position:absolute;inset:0;background:var(--border-strong);border-radius:999px;transition:.2s;cursor:pointer;pointer-events:none}
   .slider::before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s}
   .switch input:checked + .slider{background:var(--blue)}
   .switch input:checked + .slider::before{transform:translateX(20px)}
@@ -331,6 +331,14 @@
       <div class="f-row"><label>思考模式 reasoning</label>
         <span class="switch"><input type="checkbox" id="setReason"><span class="slider"></span></span>
         <div class="f-hint">建议与 WorkBuddy 侧思考模式保持一致（同开同关）</div></div>
+      <div class="f-row" id="rowEffort"><label>思考强度 effort</label>
+        <select id="setEffort">
+          <option value="default">default · 模型默认（= xhigh）</option>
+          <option value="xhigh">xhigh · 深度思考（最慢最费 token）</option>
+          <option value="medium">medium · 均衡（日常推荐）</option>
+          <option value="low">low · 轻量快速</option>
+        </select>
+        <div class="f-hint">Qwen3.8 模板仅支持 xhigh / medium / low；传其他值模板会直接报错。默认档=xhigh，日常问答建议 medium</div></div>
     </div>
   </div>
   <div class="drawer-foot">
@@ -567,6 +575,8 @@ function openSettings(){
   $('#setRepeat').value   = o.repeat_penalty ?? 1.0;
   $('#setSeed').value     = o.seed ?? -1;
   $('#setReason').checked = o.reasoning ?? false;
+  $('#setEffort').value   = o.reasoning_effort ?? m.reasoning_effort ?? 'default';
+  syncEffortUi();
   $('#drawer').classList.add('open');
   $('#mask').classList.add('show');
 }
@@ -585,9 +595,14 @@ function collectSettings(){
     top_p: parseFloat($('#setTopP').value),
     repeat_penalty: parseFloat($('#setRepeat').value),
     seed: parseInt($('#setSeed').value),
-    reasoning: $('#setReason').checked
+    reasoning: $('#setReason').checked,
+    reasoning_effort: $('#setEffort').value
   };
 }
+function syncEffortUi(){
+  $('#setEffort').disabled = !$('#setReason').checked;
+}
+$('#setReason').onchange = syncEffortUi;
 function closeSettings(){ $('#drawer').classList.remove('open'); $('#mask').classList.remove('show'); }
 $('#btnSettings').onclick = openSettings;
 $('#drawerClose').onclick = closeSettings;

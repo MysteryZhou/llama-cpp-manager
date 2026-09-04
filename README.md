@@ -37,6 +37,7 @@ llama-manager/
 ├── launcher.py          # GUI 入口（pywebview 原生窗口，WebView2 缺失时回退浏览器）
 ├── index.html           # 前端界面（单页）
 ├── llama-manager.bat    # 一键启动（浏览器模式）
+├── llama-manager.spec   # PyInstaller 打包配置（可复现构建 EXE）
 └── scripts/             # llama.cpp 的 run-*.bat 启动脚本（每个模型一份）
 ```
 
@@ -79,6 +80,9 @@ python launcher.py
 
 ```bash
 pip install pyinstaller pywebview
+# 方式一：使用仓库内置 spec（推荐，配置与实测一致）
+pyinstaller llama-manager.spec --noconfirm
+# 方式二：命令行等价
 pyinstaller --onefile --noconsole --name llama-manager --add-data "index.html;." launcher.py
 # 产物：dist/llama-manager.exe，双击即用（WebView2 缺失时自动回退浏览器）
 ```
@@ -98,13 +102,14 @@ pyinstaller --onefile --noconsole --name llama-manager --add-data "index.html;."
 | `/api/restart` | POST | 重启 `{script, options}` |
 | `/api/switch` | POST | 切换 `{script, options}` |
 
-`options` 支持：`ctx`、`cache_k`、`cache_v`、`flash_attn`、`mtp`、`mtp_n`、`gpu_layers`、`parallel`、`threads`、`temp`、`top_p`、`repeat_penalty`、`seed`、`reasoning`。
+`options` 支持：`ctx`、`cache_k`、`cache_v`、`flash_attn`、`mtp`、`mtp_n`、`gpu_layers`、`parallel`、`threads`、`temp`、`top_p`、`repeat_penalty`、`seed`、`reasoning`、`reasoning_effort`。
 
 ## 🧩 使用技巧
 
 - **添加新模型**：把 `.gguf` 文件丢进模型目录即可，管理台自动识别、一键启动
 - **MTP 投机解码**：仅 Qwen3 系列（GGUF 内嵌 MTP 头）支持，可提速 15-20%
 - **reasoning 开关**：管理台开关 = 服务端 `--reasoning`，请与客户端（如 WorkBuddy 思考模式）保持一致，同开同关
+- **思考强度（effort）**：勾选思考模式后可选 `default / xhigh / medium / low`。注意：llama.cpp 的 `--reasoning-effort` 启动参数实为 token 预算语义（不注入模板档位），本管理台改用 `--chat-template-kwargs {"reasoning_effort":"档位"}` 注入真实档位（实测 xhigh 思考量约为 medium 的 1.7 倍）。档位白名单对齐 Qwen3 系模板枚举（xhigh/medium/low），其余值模板会直接报错
 
 ## 📄 许可证
 
